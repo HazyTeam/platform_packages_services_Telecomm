@@ -24,8 +24,6 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.os.Handler;
-import android.os.Looper;
 import android.os.SystemClock;
 
 import com.android.internal.util.IndentingPrintWriter;
@@ -80,32 +78,17 @@ public class BluetoothManager {
         }
     };
 
-    private final Handler mHandler = new Handler(Looper.getMainLooper());
-
     private final BluetoothAdapter mBluetoothAdapter;
     private final CallAudioManager mCallAudioManager;
 
     private BluetoothHeadset mBluetoothHeadset;
     private boolean mBluetoothConnectionPending = false;
     private long mBluetoothConnectionRequestTime;
-    private final Runnable mBluetoothConnectionTimeout = new Runnable() {
-        @Override
-        public void run() {
-            if (!isBluetoothAudioConnected()) {
-                Log.v(this, "Bluetooth audio inexplicably disconnected within 5 seconds of " +
-                        "connection. Updating UI.");
-            }
-            mBluetoothConnectionPending = false;
-            updateBluetoothState();
-        }
-    };
-    private final Context mContext;
 
 
     public BluetoothManager(Context context, CallAudioManager callAudioManager) {
         mBluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
         mCallAudioManager = callAudioManager;
-        mContext = context;
 
         if (mBluetoothAdapter != null) {
             mBluetoothAdapter.getProfileProxy(context, mBluetoothProfileServiceListener,
@@ -220,9 +203,16 @@ public class BluetoothManager {
         if (mBluetoothConnectionPending) {
             long timeSinceRequest =
                     SystemClock.elapsedRealtime() - mBluetoothConnectionRequestTime;
-            Log.v(this, "isBluetoothAudioConnectedOrPending: ==> TRUE (requested "
-                    + timeSinceRequest + " msec ago)");
-            return true;
+            if (timeSinceRequest < 5000 /* 5 seconds */) {
+                Log.v(this, "isBluetoothAudioConnectedOrPending: ==> TRUE (requested "
+                             + timeSinceRequest + " msec ago)");
+                return true;
+            } else {
+                Log.v(this, "isBluetoothAudioConnectedOrPending: ==> FALSE (request too old: "
+                             + timeSinceRequest + " msec ago)");
+                mBluetoothConnectionPending = false;
+                return false;
+            }
         }
 
         Log.v(this, "isBluetoothAudioConnectedOrPending: ==> FALSE");
@@ -249,9 +239,6 @@ public class BluetoothManager {
         // instantly. (See isBluetoothAudioConnectedOrPending() above.)
         mBluetoothConnectionPending = true;
         mBluetoothConnectionRequestTime = SystemClock.elapsedRealtime();
-        mHandler.removeCallbacks(mBluetoothConnectionTimeout);
-        mHandler.postDelayed(mBluetoothConnectionTimeout,
-                Timeouts.getBluetoothPendingTimeoutMillis(mContext.getContentResolver()));
     }
 
     void disconnectBluetoothAudio() {
@@ -259,7 +246,6 @@ public class BluetoothManager {
         if (mBluetoothHeadset != null) {
             mBluetoothHeadset.disconnectAudio();
         }
-        mHandler.removeCallbacks(mBluetoothConnectionTimeout);
         mBluetoothConnectionPending = false;
     }
 
