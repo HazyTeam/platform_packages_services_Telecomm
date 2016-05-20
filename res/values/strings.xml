@@ -137,5 +137,4 @@
 
     <!-- DO NOT TRANSLATE. Hardcoded number used for restricted incoming phone numbers. -->
     <string name="handle_restricted">RESTRICTED</string>
-
 </resources>
